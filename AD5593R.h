@@ -24,7 +24,8 @@
 class AD5593R
 {
 public:
-  AD5593R(const uint8_t deviceAddress, TwoWire * wire = &Wire);
+  AD5593R(const uint8_t deviceAddress = 0x08, TwoWire * wire = &Wire);
+  AD5593R(const AD5593R& ad) : _address(ad._address), _error(ad._error), _wire(ad._wire) {};
 
   bool     begin();
   bool     isConnected();
@@ -45,6 +46,12 @@ public:
 
   //  analog
   uint16_t writeDAC(uint8_t pin, uint16_t value);
+  
+  void      beginLDAC(uint8_t instant);
+  uint16_t  writeLDAC(uint8_t pin, uint16_t data )
+  uint16_t  endLDAC()
+
+
   uint16_t readDAC(uint8_t pin);
   uint16_t readADC(uint8_t pin);
 

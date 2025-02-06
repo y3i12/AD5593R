@@ -11,20 +11,21 @@
 
 
 //  CONFIG REGISTERS (aka pointer bytes)
-#define AD5593_NOP                      0x00
-#define AD5593_ADC_SEQ                  0x02
-#define AD5593_GEN_CTRL_REG             0x03
-#define AD5593_ADC_CONFIG               0x04
-#define AD5593_DAC_CONFIG               0x05
-#define AD5593_PULLDOWN_CONFIG          0x06
-#define AD5593_LDAC_MODE                0x07
-#define AD5593_GPIO_CONFIG              0x08
-#define AD5593_GPIO_OUTPUT              0x09
-#define AD5593_GPIO_INPUT               0x0A
-#define AD5593_POWERDOWN_REF_CTRL       0x0B
-#define AD5593_GPIO_OPENDRAIN_CONFIG    0x0C
-#define AD5593_IO_TS_CONFIG             0x0D
-#define AD5593_SW_RESET                 0x0F
+
+#define AD5593_NOP                      0b00000000 // NOP. No operation.
+#define AD5593_ADC_SEQ                  0b00000010 // ADC sequence register. Selects ADCs for conversion.
+#define AD5593_GEN_CTRL_REG             0b00000011 // General-purpose control register. DAC and ADC control register.
+#define AD5593_ADC_CONFIG               0b00000100 // ADC pin configuration. Selects which pins are ADC inputs.
+#define AD5593_DAC_CONFIG               0b00000101 // DAC pin configuration. Selects which pins are DAC outputs.
+#define AD5593_PULLDOWN_CONFIG          0b00000110 // Pull-down configuration. Selects which pins have an 85 kΩ pull-down resistor to GND.
+#define AD5593_LDAC_MODE                0b00000111 // LDAC mode. Selects the operation of the load DAC.
+#define AD5593_GPIO_CONFIG              0b00001000 // GPIO write configuration. Selects which pins are general-purpose outputs.
+#define AD5593_GPIO_OUTPUT              0b00001001 // GPIO write data. Writes data to general-purpose outputs.
+#define AD5593_GPIO_INPUT               0b00001010 // GPIO read configuration. Selects which pins are general-purpose inputs.
+#define AD5593_POWERDOWN_REF_CTRL       0b00001011 // Power-down/reference control. Powers down the DACs and enables/disables the reference.
+#define AD5593_GPIO_OPENDRAIN_CONFIG    0b00001100 // Open-drain configuration. Selects open-drain or push-pull for general-purpose outputs.
+#define AD5593_IO_TS_CONFIG             0b00001101 // Three-state pins. Selects which pins are three-stated.
+#define AD5593_SW_RESET                 0b00001111 // Software reset. Resets the AD5593R
 
 //  IO REGISTERS
 #define AD5593_DAC_WRITE(x)             (0x10 + (x))
@@ -32,6 +33,12 @@
 #define AD5593_DAC_READ(x)              (0x50 + (x))
 #define AD5593_GPIO_READ                0x60
 #define AD5593_GPIO_READ_CONFIG         0x70
+
+// LDAC REGISTERS
+#define AD5593_LDAC_INSTANT (0b00000000 | AD5593_LDAC_MODE) // Data written to an input register is immediately copied to a DAC register, and the DAC output updates.
+#define AD5593_LDAC_LOAD    (0b10000000 | AD5593_LDAC_MODE) // Data written to an input register is not copied to a DAC register. The DAC output is not updated.
+#define AD5593_LDAC_FLUSH   (0b01000000 | AD5593_LDAC_MODE) // Data in the input registers is copied to the corresponding DAC registers. When the data has been transferred, the DAC outputs are updated simultaneously.
+
 
 
 
@@ -142,8 +149,50 @@ uint16_t AD5593R::read8()
 uint16_t AD5593R::writeDAC(uint8_t pin, uint16_t value)
 {
   if (pin > 7) return AD5593R_PIN_ERROR;
-  if (value > 0x0FFF) value = 0x0FFF;   //  TODO document choice.
+
+  value &= 0x0FFF;
+
   return writeRegister(AD5593_DAC_WRITE(pin), value);
+}
+
+void AD5593R::beginLDAC(uint8_t instant)
+{
+  _wire->beginTransmission(_address);
+  _wire->write(instant ? AD5593_LDAC_INSTANT : AD5593_LDAC_LOAD);
+}
+
+uint16_t AD5593R::writeLDAC(uint8_t pin, uint16_t data )
+{
+  
+  if (pin > 7) return AD5593R_PIN_ERROR;
+
+  value &= 0x0FFF;
+
+  _wire->write(AD5593_DAC_WRITE(pin));
+  _wire->write(data >> 8);
+  _wire->write(data & 0xFF);
+}
+
+uint16_t AD5593R::endLDAC()
+{
+  _wire->write(reg);
+  
+  _error = _wire->endTransmission();
+  return _error;
+}
+
+uint16_t AD5593R::writeDAC(uint16_t v0, uint16_t v1, uint16_t v2, uint16_t v3, uint16_t v4, uint16_t v5, uint16_t v6, uint16_t v7) 
+{
+  beginLDAC();
+  ldac(0, v0);
+  ldac(1, v1);
+  ldac(2, v2);
+  ldac(3, v3);
+  ldac(4, v4);
+  ldac(5, v5);
+  ldac(6, v6);
+  ldac(7, v7);
+  return endLDAC();
 }
 
 uint16_t AD5593R::readDAC(uint8_t pin)
